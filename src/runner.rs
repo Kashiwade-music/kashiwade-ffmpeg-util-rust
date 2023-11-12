@@ -5,17 +5,50 @@ use std::path::{Path, PathBuf};
 pub struct Runner {
     pub args: super::Args,
     pub config: super::Config,
+    pub should_use_ffmpeg_path_field: bool,
 }
 use std::process::Command as ProcessCommand;
 use std::process::Stdio;
 
 impl Runner {
     pub fn run(&self) {
-        let command: &super::Command = self.get_command();
-        let input_path = self.get_input_path();
-        let options = self.get_options(command.options.clone());
-        let output_path = self.get_output_path(input_path.clone(), command);
-        self.execute_command(command, input_path, options, output_path);
+        if self.args.hash != None && self.args.input_path != None {
+            let hash = self.args.hash.clone().unwrap();
+            let input_path = self.args.input_path.clone().unwrap();
+            let command = self
+                .config
+                .commands
+                .iter()
+                .find(|command| super::get_hash(command.title.clone()) == hash)
+                .unwrap();
+            let options: Vec<_> = command
+                .options
+                .iter()
+                .flat_map(|option| vec![option.flag.clone(), option.value.clone()])
+                .collect();
+            let output_path = Path::new(input_path.as_str()).parent().unwrap().join(
+                Path::new(input_path.as_str())
+                    .file_stem()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    + command.output_filename_suffix.as_str()
+                    + command.output_extension.as_str(),
+            );
+            self.execute_command_no_interaction(
+                command,
+                Path::new(input_path.as_str()).to_path_buf(),
+                options,
+                output_path,
+            );
+        } else {
+            let command: &super::Command = self.get_command();
+            let input_path = self.get_input_path();
+            let options = self.get_options(command.options.clone());
+            let output_path = self.get_output_path(input_path.clone(), command);
+            self.execute_command(command, input_path, options, output_path);
+        }
     }
 
     fn print_message(&self, message: &str, is_from_system: bool) {
@@ -187,7 +220,16 @@ impl Runner {
         let mut command_str = command.command.clone();
         command_str = command_str
             .iter()
-            .map(|s| s.replace("{{ffmpeg_path}}", "ffmpeg"))
+            .map(|s| {
+                s.replace(
+                    "{{ffmpeg_path}}",
+                    if self.should_use_ffmpeg_path_field {
+                        self.config.ffmpeg_path.as_str()
+                    } else {
+                        "ffmpeg"
+                    },
+                )
+            })
             .collect();
         command_str = command_str
             .iter()
@@ -236,6 +278,69 @@ impl Runner {
             }
         } else {
             self.print_message("You chose not to execute the command.", false);
+        }
+    }
+
+    fn execute_command_no_interaction(
+        &self,
+        command: &super::Command,
+        input_path: PathBuf,
+        options: Vec<String>,
+        output_path: PathBuf,
+    ) {
+        let mut command_str = command.command.clone();
+        command_str = command_str
+            .iter()
+            .map(|s| {
+                s.replace(
+                    "{{ffmpeg_path}}",
+                    if self.should_use_ffmpeg_path_field {
+                        self.config.ffmpeg_path.as_str()
+                    } else {
+                        "ffmpeg"
+                    },
+                )
+            })
+            .collect();
+        command_str = command_str
+            .iter()
+            .map(|s| s.replace("{{input_path}}", input_path.display().to_string().as_str()))
+            .collect();
+
+        if let Some(index) = command_str.iter().position(|s| s == "{{options}}") {
+            command_str.splice(index..index + 1, options);
+        }
+
+        command_str = command_str
+            .iter()
+            .map(|s| {
+                s.replace(
+                    "{{output_path}}",
+                    output_path.display().to_string().as_str(),
+                )
+            })
+            .collect();
+
+        self.print_message("Command is as follows.", true);
+        println!("{:?}", command_str);
+
+        let result = match ProcessCommand::new(command_str[0].clone())
+            .args(&command_str[1..])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+        {
+            Ok(result) => result,
+            Err(error) => {
+                self.print_message(format!("error: {}", error.to_string()).as_str(), true);
+                panic!();
+            }
+        };
+
+        if result.status.success() {
+            self.print_message("Command executed successfully.", true);
+        } else {
+            self.print_message("Command failed.", true);
         }
     }
 }

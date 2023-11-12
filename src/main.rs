@@ -64,6 +64,7 @@ fn main() {
         let runner = runner::Runner {
             args: checker.args,
             config: checker.config.unwrap(),
+            should_use_ffmpeg_path_field: checker.should_use_ffmpeg_path_field.unwrap(),
         };
         runner.run();
     }

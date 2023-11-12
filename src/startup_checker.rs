@@ -15,7 +15,7 @@ pub struct StartupChecker {
 impl StartupChecker {
     pub fn check(&mut self) -> bool {
         let mut result = self.check_config();
-        self.config = Some(self.load_config());
+        self.load_config();
         result = self.check_args() && result;
         result = self.check_ffmpeg_executable() && result;
         println!();
@@ -97,7 +97,7 @@ commands:
         }
     }
 
-    fn load_config(&self) -> super::Config {
+    fn load_config(&mut self) {
         let config_path = dirs::home_dir()
             .unwrap()
             .join(".config")
@@ -105,7 +105,21 @@ commands:
             .join("config.yaml");
         let config_str = fs::read_to_string(config_path).expect("Unable to read file");
         let config: super::Config = serde_yaml::from_str(&config_str).unwrap();
-        return config;
+        self.config = Some(config);
+
+        match &self.config {
+            Some(config) => {
+                self.print_message("Config loaded.", true);
+                for command in config.commands.iter() {
+                    println!(
+                        "    {} -> {}",
+                        get_hash(command.title.clone()).as_str().bright_cyan(),
+                        command.title.clone().as_str(),
+                    );
+                }
+            }
+            None => {}
+        }
     }
 
     fn check_args(&self) -> bool {
@@ -180,6 +194,7 @@ commands:
             .expect("failed to execute process");
         if result.status.success() {
             self.print_message("ffmpeg command found", true);
+            self.should_use_ffmpeg_path_field = Some(false);
             return true;
         } else {
             self.print_message("ffmpeg command not found", false);
@@ -207,6 +222,7 @@ commands:
                     .as_str(),
                     false,
                 );
+                self.should_use_ffmpeg_path_field = Some(true);
                 return false;
             }
         }
