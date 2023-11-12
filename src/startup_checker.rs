@@ -81,7 +81,10 @@ commands:
             .join("kffmpeg")
             .join("config.yaml");
         if Path::is_file(&config_path) {
-            self.print_message("Config file found", true);
+            self.print_message(
+                format!("Config file found at {}", config_path.display().to_string()).as_str(),
+                true,
+            );
             return true;
         } else {
             self.create_config();
