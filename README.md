@@ -5,6 +5,8 @@
 
 ![Alt text](doc/head.png)
 
+[→日本語版](https://github.com/Kashiwade-music/kashiwade-ffmpeg-util-rust/blob/main/README_JPN.md)
+
 ## About
 A handy tool for ffmpeg. Just type `kffmpeg` after pre-writing commands in a yaml file to execute ffmpeg interactively without the need to search for commands.
 
