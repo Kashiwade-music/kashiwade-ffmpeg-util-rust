@@ -4,9 +4,12 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command as ProcessCommand;
 
+use crate::get_hash;
+
 pub struct StartupChecker {
     pub args: super::Args,
     pub config: Option<super::Config>,
+    pub should_use_ffmpeg_path_field: Option<bool>,
 }
 
 impl StartupChecker {
@@ -119,15 +122,58 @@ commands:
             );
             return false;
         } else if self.args.hash != None && self.args.input_path != None {
-            self.print_message("You specified --hash and --input_path. So, kffmpeg will run without user interaction.", true);
-            return true;
+            let mut result: bool;
+            if self
+                .config
+                .as_ref()
+                .unwrap()
+                .commands
+                .iter()
+                .map(|c| get_hash(c.title.clone()))
+                .collect::<Vec<String>>()
+                .contains(&self.args.hash.clone().unwrap())
+            {
+                self.print_message(
+                    format!(
+                        "Specified hash code is found in config file. title -> {}",
+                        self.config.as_ref().unwrap().commands[self
+                            .config
+                            .as_ref()
+                            .unwrap()
+                            .commands
+                            .iter()
+                            .map(|c| get_hash(c.title.clone()))
+                            .collect::<Vec<String>>()
+                            .iter()
+                            .position(|r| r == self.args.hash.as_ref().unwrap().as_str())
+                            .unwrap()]
+                        .title
+                        .clone()
+                        .as_str()
+                    )
+                    .as_str(),
+                    true,
+                );
+                result = true;
+            } else {
+                self.print_message("Specified hash code is not found in config file", false);
+                result = false;
+            }
+            if Path::is_file(Path::new(self.args.input_path.clone().unwrap().as_str())) {
+                self.print_message("Specified input file is found", true);
+                result = true && result;
+            } else {
+                self.print_message("Specified input file is not found", false);
+                result = false && result;
+            }
+            return result;
         } else {
             self.print_message("You did not specify --hash and --input_path. So, kffmpeg will run with user interaction.", true);
             return true;
         }
     }
 
-    fn check_ffmpeg_executable(&self) -> bool {
+    fn check_ffmpeg_executable(&mut self) -> bool {
         let result = ProcessCommand::new("ffmpeg")
             .arg("-version")
             .output()
@@ -137,7 +183,32 @@ commands:
             return true;
         } else {
             self.print_message("ffmpeg command not found", false);
-            return false;
+            let result_2 = ProcessCommand::new(self.config.as_ref().unwrap().ffmpeg_path.clone())
+                .arg("-version")
+                .output()
+                .expect("failed to execute process");
+            if result_2.status.success() {
+                self.print_message(
+                    format!(
+                        "ffmpeg command found at {}",
+                        self.config.as_ref().unwrap().ffmpeg_path.clone()
+                    )
+                    .as_str(),
+                    true,
+                );
+                self.should_use_ffmpeg_path_field = Some(true);
+                return true;
+            } else {
+                self.print_message(
+                    format!(
+                        "ffmpeg command not found at {}",
+                        self.config.as_ref().unwrap().ffmpeg_path.clone()
+                    )
+                    .as_str(),
+                    false,
+                );
+                return false;
+            }
         }
     }
 }

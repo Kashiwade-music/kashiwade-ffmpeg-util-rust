@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::env;
 mod runner;
 mod startup_checker;
+use data_encoding::HEXLOWER;
+use ring::digest;
 
 #[derive(Parser, Debug)]
 #[clap(name = env!("CARGO_PKG_NAME"), version = env!("CARGO_PKG_VERSION"), author = env!("CARGO_PKG_AUTHORS"), about = env!("CARGO_PKG_DESCRIPTION"))]
@@ -44,11 +46,18 @@ pub struct Config {
     commands: Vec<Command>,
 }
 
+fn get_hash(input: String) -> String {
+    let digest = digest::digest(&digest::SHA256, input.as_bytes());
+    let hash = HEXLOWER.encode(digest.as_ref());
+    return hash[0..8].to_string();
+}
+
 fn main() {
     let args = Args::parse();
     let mut checker = startup_checker::StartupChecker {
         args: args,
         config: None,
+        should_use_ffmpeg_path_field: None,
     };
     let check_result = checker.check();
     if check_result {
